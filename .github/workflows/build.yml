@@ -1,5 +1,8 @@
 name: Build
 
+# Every push builds and tests. Additionally:
+#  - push to main     -> replaces the "latest" pre-release (stable download link for the phone)
+#  - push a tag v*    -> creates a proper GitHub Release with the signed APK
 on:
   push:
   pull_request:
@@ -9,13 +12,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write # create releases
+
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Secrets aren't available on PRs from forks; the release steps are skipped then.
+      # Secrets aren't available on PRs from forks; the signing/release steps are skipped then.
       HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      # Must increase with every build so new APKs install over old ones.
+      VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v7
 
@@ -24,8 +32,17 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Caches Gradle dependencies and validates the wrapper jar.
+      # Caches the Gradle wrapper, dependencies and build cache (org.gradle.caching=true).
+      # Cache is written from main and read everywhere else.
       - uses: gradle/actions/setup-gradle@v6
+
+      - name: Set version name
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_NAME=dev-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
 
       # The Android SDK is preinstalled on GitHub's ubuntu runners (ANDROID_HOME is set).
       - name: Unit tests
@@ -34,7 +51,7 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
-      - name: Upload APK
+      - name: Upload debug APK
         uses: actions/upload-artifact@v7
         with:
           name: receipts-debug-${{ github.sha }}
@@ -54,19 +71,42 @@ jobs:
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: ./gradlew assembleRelease
+        run: |
+          ./gradlew assembleRelease
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/receipts-${VERSION_NAME}.apk"
+
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
 
       - name: Upload release APK
         if: env.HAS_KEYSTORE == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: receipts-release-${{ github.sha }}
-          path: app/build/outputs/apk/release/*.apk
+          path: dist/*.apk
           retention-days: 30
 
-      - name: Remove signing key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.jks"
+      - name: Publish GitHub Release (tag)
+        if: env.HAS_KEYSTORE == 'true' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.apk \
+            --verify-tag --generate-notes --title "Receipts $VERSION_NAME"
+
+      - name: Update "latest" pre-release (main)
+        if: env.HAS_KEYSTORE == 'true' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp dist/*.apk dist/receipts-latest.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest dist/receipts-latest.apk \
+            --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Latest build from main" \
+            --notes "Built from ${GITHUB_SHA::7} (version $VERSION_NAME, code $VERSION_CODE). Replaced on every push to main."
 
       - name: Upload test report
         if: failure()

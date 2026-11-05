@@ -72,6 +72,17 @@ keyAlias=receipts
 
 Register the key's SHA-1 as an Android OAuth client in Google Cloud. You can keep your debug key's client as well.
 
+## Releases
+
+- Every push to `main` replaces the **latest** pre-release. The APK is always at
+  https://github.com/gromgull/receipt-scanner/releases/download/latest/receipts-latest.apk
+- Pushing a version tag creates a proper release with the signed APK and generated notes:
+  ```bash
+  git tag v0.2.0 && git push origin v0.2.0
+  ```
+
+`versionCode` is the CI run number, so every CI build installs over the previous one.
+
 ## Ideas for later
 
 - Save a PDF next to the JPEG: add `RESULT_FORMAT_PDF` to the scanner options.

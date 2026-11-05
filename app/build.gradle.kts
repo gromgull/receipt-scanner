@@ -23,8 +23,9 @@ android {
         applicationId = "app.receiptscanner"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Set by CI (run number / tag); local builds get a fixed dev version.
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "0.0.0-local"
     }
 
     val releaseSigning = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")?.let { path ->
