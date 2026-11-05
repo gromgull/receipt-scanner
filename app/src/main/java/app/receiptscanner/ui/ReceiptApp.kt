@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -193,7 +195,7 @@ private fun UploadRow(item: UploadItem, onRetry: (UploadItem) -> Unit) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ReviewScreen(
     review: ScanState.Review,
@@ -237,21 +239,32 @@ private fun ReviewScreen(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth().height(360.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                review.info.merchant?.let { AssistChip(onClick = {}, label = { Text(it) }) }
-                review.info.date?.let { AssistChip(onClick = {}, label = { Text(it.toString()) }) }
-                review.info.total?.let { total ->
-                    AssistChip(onClick = {}, label = { Text(listOfNotNull(total, review.info.currency).joinToString(" ")) })
+            // Wrap chips onto new lines instead of squeezing them (long merchant names, large fonts).
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+            ) {
+                val detected = listOfNotNull(
+                    review.info.merchant,
+                    review.info.date?.toString(),
+                    review.info.total?.let { listOfNotNull(it, review.info.currency).joinToString(" ") },
+                )
+                detected.forEach { value ->
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    )
                 }
             }
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it },
+                onValueChange = { name = it.replace("\n", " ") },
                 label = { Text("File name") },
-                suffix = { Text(".jpg") },
-                singleLine = true,
+                // Wraps instead of scrolling sideways so the whole name stays visible.
+                minLines = 1,
+                maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                supportingText = { Text("Uploads to Drive › $folderName") },
+                supportingText = { Text("Saved as .jpg in Drive › $folderName") },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
