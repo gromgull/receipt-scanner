@@ -52,6 +52,26 @@ Open the folder in Android Studio and run, or:
 
 The phone needs Google Play services. The document scanner needs about 1.7 GB of RAM and downloads its model on first use.
 
+## Release signing (CI)
+
+CI builds a signed release APK when these repository secrets are set (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the `.jks` file, base64-encoded |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_KEY_ALIAS` | the key alias (e.g. `receipts`) |
+
+To sign release builds locally with the same key, create a `keystore.properties` file in the repo root. It is git-ignored.
+
+```properties
+storeFile=/absolute/path/to/receipts-release.jks
+storePassword=...
+keyAlias=receipts
+```
+
+Register the key's SHA-1 as an Android OAuth client in Google Cloud. You can keep your debug key's client as well.
+
 ## Ideas for later
 
 - Save a PDF next to the JPEG: add `RESULT_FORMAT_PDF` to the scanner options.

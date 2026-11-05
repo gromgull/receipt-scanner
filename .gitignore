@@ -8,3 +8,8 @@
 /captures/
 .externalNativeBuild/
 .cxx/
+
+# Signing keys — never commit
+keystore.properties
+*.jks
+*.keystore

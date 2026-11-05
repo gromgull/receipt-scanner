@@ -1,8 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+// Release signing: read from keystore.properties (local, git-ignored) or environment variables (CI).
+// Without either, release builds are left unsigned and debug builds are unaffected.
+val keystoreProps = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(property: String, env: String): String? =
+    keystoreProps.getProperty(property) ?: System.getenv(env)?.takeIf { it.isNotEmpty() }
 
 android {
     namespace = "app.receiptscanner"
@@ -17,8 +27,19 @@ android {
         versionName = "0.1.0"
     }
 
+    val releaseSigning = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")?.let { path ->
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(path)
+            storePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
+            // PKCS12 keystores (keytool's default) use the store password for the key too.
+            keyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD") ?: storePassword
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = releaseSigning
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
