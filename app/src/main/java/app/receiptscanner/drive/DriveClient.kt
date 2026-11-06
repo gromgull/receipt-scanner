@@ -20,8 +20,9 @@ class DriveException(val code: Int, message: String) : IOException("Drive HTTP $
 /** Minimal Drive v3 REST client — just what we need, without the heavy Java client library. */
 class DriveClient(private val accessToken: String) {
 
-    suspend fun findOrCreateFolder(name: String): String = withContext(Dispatchers.IO) {
-        findFolder(name) ?: createFolder(name)
+    /** Returns the id of the folder called [name] directly inside [parentId], creating it if missing. */
+    suspend fun findOrCreateFolder(name: String, parentId: String = ROOT): String = withContext(Dispatchers.IO) {
+        findFolder(name, parentId) ?: createFolder(name, parentId)
     }
 
     /** Uploads [file] as [fileName] into [folderId]; returns the new file id. */
@@ -42,12 +43,12 @@ class DriveClient(private val accessToken: String) {
             JSONObject(execute(request)).getString("id")
         }
 
-    private fun findFolder(name: String): String? {
+    private fun findFolder(name: String, parentId: String): String? {
         val escaped = name.replace("\\", "\\\\").replace("'", "\\'")
         val url = FILES_URL.toHttpUrl().newBuilder()
             .addQueryParameter(
                 "q",
-                "name = '$escaped' and mimeType = '$FOLDER_MIME' and 'root' in parents and trashed = false",
+                "name = '$escaped' and mimeType = '$FOLDER_MIME' and '$parentId' in parents and trashed = false",
             )
             .addQueryParameter("fields", "files(id)")
             .addQueryParameter("spaces", "drive")
@@ -56,8 +57,11 @@ class DriveClient(private val accessToken: String) {
         return if (files.length() > 0) files.getJSONObject(0).getString("id") else null
     }
 
-    private fun createFolder(name: String): String {
-        val metadata = JSONObject().put("name", name).put("mimeType", FOLDER_MIME)
+    private fun createFolder(name: String, parentId: String): String {
+        val metadata = JSONObject()
+            .put("name", name)
+            .put("mimeType", FOLDER_MIME)
+            .put("parents", JSONArray().put(parentId))
         val request = Request.Builder()
             .url("$FILES_URL?fields=id")
             .post(metadata.toString().toRequestBody(JSON))
@@ -75,7 +79,8 @@ class DriveClient(private val accessToken: String) {
     }
 
     companion object {
-        private const val FILES_URL = "https://www.googleapis.com/drive/v3/files"
+        private const val ROOT = "root"
+        private const val FILES_URL ="https://www.googleapis.com/drive/v3/files"
         private const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
         private const val FOLDER_MIME = "application/vnd.google-apps.folder"
         private val JSON = "application/json; charset=utf-8".toMediaType()

@@ -1,6 +1,8 @@
 package app.receiptscanner.scan
 
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** One line of OCR output, with its vertical position on the image (pixels). */
 data class OcrLine(val text: String, val top: Int, val height: Int) {
@@ -186,4 +188,13 @@ object ReceiptNamer {
             .trim()
             .take(80)
             .trim()
+
+    // ---------------------------------------------------------------- trip folder
+
+    // Fixed locale: folder names shouldn't change with the phone's language.
+    private val TRIP_MONTH = DateTimeFormatter.ofPattern("MMMM uuuu", Locale.ENGLISH)
+
+    /** "Oslo" + a date in November 2026 -> "Oslo November 2026". */
+    fun tripFolderName(destination: String, start: LocalDate): String =
+        "${sanitize(destination)} ${start.format(TRIP_MONTH)}"
 }

@@ -31,7 +31,15 @@ sealed interface ScanState {
     data class Review(val image: File, val suggestedName: String, val info: ReceiptInfo) : ScanState
 }
 
-data class UploadItem(val id: String, val path: String, val name: String, val time: Long, val state: WorkInfo.State, val error: String?)
+data class UploadItem(
+    val id: String,
+    val path: String,
+    val name: String,
+    val time: Long,
+    val state: WorkInfo.State,
+    val error: String?,
+    val tripFolder: String?,
+)
 
 class ReceiptViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -83,10 +91,11 @@ class ReceiptViewModel(app: Application) : AndroidViewModel(app) {
     fun upload(name: String) {
         val review = _scan.value as? ScanState.Review ?: return
         val folder = settings.value?.folderName ?: Settings.DEFAULT_FOLDER
+        val trip = settings.value?.tripFolder
         val fileName = ReceiptNamer.sanitize(name).ifEmpty { review.suggestedName }
-        UploadWorker.enqueue(getApplication(), review.image, fileName, folder)
+        UploadWorker.enqueue(getApplication(), review.image, fileName, folder, trip)
         _scan.value = ScanState.Idle
-        _message.value = "Uploading “$fileName” to Drive/$folder"
+        _message.value = "Uploading “$fileName” to Drive/$folder" + trip?.let { "/$it" }.orEmpty()
     }
 
     fun discard() {
@@ -96,7 +105,7 @@ class ReceiptViewModel(app: Application) : AndroidViewModel(app) {
 
     fun retry(item: UploadItem) {
         val folder = settings.value?.folderName ?: Settings.DEFAULT_FOLDER
-        UploadWorker.schedule(getApplication(), item.path, folder)
+        UploadWorker.schedule(getApplication(), item.path, folder, item.tripFolder)
     }
 
     fun onDriveConnected() = viewModelScope.launch { settingsRepo.setDriveConnected(true) }
@@ -115,6 +124,8 @@ class ReceiptViewModel(app: Application) : AndroidViewModel(app) {
             time = time,
             state = state,
             error = outputData.getString(UploadWorker.KEY_ERROR),
+            tripFolder = tags.firstOrNull { it.startsWith(UploadWorker.TRIP_TAG_PREFIX) }
+                ?.removePrefix(UploadWorker.TRIP_TAG_PREFIX),
         )
     }
 }

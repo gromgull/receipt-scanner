@@ -31,6 +31,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val file = inputData.getString(KEY_PATH)?.let(::File)
         if (file == null || !file.exists()) return Result.failure(error("Local file is missing"))
         val folderName = inputData.getString(KEY_FOLDER) ?: return Result.failure(error("No folder"))
+        val tripFolder = inputData.getString(KEY_TRIP)
 
         val auth = try {
             DriveAuth.authorize(applicationContext)
@@ -47,7 +48,10 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         return try {
             val drive = DriveClient(token)
             // Serialize folder lookup so parallel uploads don't create duplicate folders.
-            val folderId = folderMutex.withLock { drive.findOrCreateFolder(folderName) }
+            val folderId = folderMutex.withLock {
+                val root = drive.findOrCreateFolder(folderName)
+                if (tripFolder != null) drive.findOrCreateFolder(tripFolder, parentId = root) else root
+            }
             drive.upload(file, file.name, folderId)
             file.parentFile?.deleteRecursively()
             Result.success()
@@ -70,10 +74,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val TAG = "UploadWorker"
         private const val KEY_PATH = "path"
         private const val KEY_FOLDER = "folder"
+        private const val KEY_TRIP = "trip"
         const val KEY_ERROR = "error"
         const val WORK_TAG = "receipt-upload"
         const val PATH_TAG_PREFIX = "path:"
         const val TIME_TAG_PREFIX = "time:"
+        const val TRIP_TAG_PREFIX = "trip:"
         private const val MAX_ATTEMPTS = 10
         private val RETRYABLE_HTTP = setOf(401, 403, 408, 429)
         private val folderMutex = Mutex()
@@ -82,29 +88,31 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
          * Moves [scan] into a private outbox as "[fileName].jpg" and schedules the upload.
          * Each receipt gets its own outbox directory, so identical names never collide.
          */
-        fun enqueue(context: Context, scan: File, fileName: String, folderName: String) {
+        fun enqueue(context: Context, scan: File, fileName: String, folderName: String, tripFolder: String?) {
             val dir = File(context.filesDir, "outbox/${UUID.randomUUID()}").apply { mkdirs() }
             val target = File(dir, "$fileName.jpg")
             if (!scan.renameTo(target)) {
                 scan.copyTo(target, overwrite = true)
                 scan.delete()
             }
-            schedule(context, target.absolutePath, folderName)
+            schedule(context, target.absolutePath, folderName, tripFolder)
         }
 
         /**
          * (Re)schedules the upload of a file in the outbox. Work is unique per file, so
          * retrying a failed upload replaces its old entry instead of adding a second one.
+         * [tripFolder] is also kept as a tag, so a retry goes to the trip the receipt was scanned on.
          */
-        fun schedule(context: Context, path: String, folderName: String) {
+        fun schedule(context: Context, path: String, folderName: String, tripFolder: String?) {
             if (!File(path).exists()) return
             val request = OneTimeWorkRequestBuilder<UploadWorker>()
-                .setInputData(workDataOf(KEY_PATH to path, KEY_FOLDER to folderName))
+                .setInputData(workDataOf(KEY_PATH to path, KEY_FOLDER to folderName, KEY_TRIP to tripFolder))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .addTag(WORK_TAG)
                 .addTag(PATH_TAG_PREFIX + path)
                 .addTag(TIME_TAG_PREFIX + System.currentTimeMillis())
+                .apply { if (tripFolder != null) addTag(TRIP_TAG_PREFIX + tripFolder) }
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(path, ExistingWorkPolicy.REPLACE, request)

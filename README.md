@@ -14,6 +14,10 @@ A small Android app that scans a receipt, crops and straightens it, reads it wit
 
 The flow: the app opens straight into the scanner. After a scan you get a review screen with the suggested name, which you can edit, and an Upload button. In Settings you can change the Drive folder, connect Drive, and turn on **Upload without review**. With that on, you scan, it uploads, and the camera reopens for the next receipt.
 
+### Trips
+
+In Settings, **Start trip** asks for a destination. Until you tap **End trip**, receipts go to a subfolder named after the destination and the current month, such as `Receipts/Oslo November 2026`. The app creates the subfolder on the first upload. The month is set when the trip starts, so a trip that crosses a month end stays in one folder. A failed upload keeps its trip when you retry it, even if the trip has ended.
+
 ### Why the folder is a name, not a folder picker
 
 The app uses the `drive.file` scope, so it can only see files and folders it created itself. That scope is non-sensitive, so it needs no Google security review. The catch is that the app can't use an existing folder you made in Drive. Instead, it creates the folder named in Settings (default `Receipts`) in My Drive and reuses it after that.

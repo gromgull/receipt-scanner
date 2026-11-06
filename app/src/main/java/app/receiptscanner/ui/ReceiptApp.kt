@@ -99,7 +99,7 @@ fun ReceiptApp(
             val review = scan as ScanState.Review
             ReviewScreen(
                 review = review,
-                folderName = current?.folderName.orEmpty(),
+                folderPath = listOfNotNull(current?.folderName, current?.tripFolder).joinToString(" › "),
                 autoUpload = current?.autoUpload == true,
                 snackbar = snackbar,
                 onUpload = onUpload,
@@ -109,6 +109,7 @@ fun ReceiptApp(
         }
         else -> HomeScreen(
             uploads = uploads,
+            tripFolder = current?.tripFolder,
             snackbar = snackbar,
             onScan = onScan,
             onSettings = { showSettings = true },
@@ -132,6 +133,7 @@ private fun Processing() {
 @Composable
 private fun HomeScreen(
     uploads: List<UploadItem>,
+    tripFolder: String?,
     snackbar: SnackbarHostState,
     onScan: () -> Unit,
     onSettings: () -> Unit,
@@ -140,7 +142,19 @@ private fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Receipts") },
+                title = {
+                    Column {
+                        Text("Receipts")
+                        if (tripFolder != null) {
+                            Text(
+                                tripFolder,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                },
                 actions = {
                     IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Settings") }
                 },
@@ -199,7 +213,7 @@ private fun UploadRow(item: UploadItem, onRetry: (UploadItem) -> Unit) {
 @Composable
 private fun ReviewScreen(
     review: ScanState.Review,
-    folderName: String,
+    folderPath: String,
     autoUpload: Boolean,
     snackbar: SnackbarHostState,
     onUpload: (String) -> Unit,
@@ -264,7 +278,7 @@ private fun ReviewScreen(
                 minLines = 1,
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                supportingText = { Text("Saved as .jpg in Drive › $folderName") },
+                supportingText = { Text("Saved as .jpg in Drive › $folderPath") },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
