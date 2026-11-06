@@ -14,6 +14,7 @@ import androidx.work.workDataOf
 import app.receiptscanner.drive.DriveAuth
 import app.receiptscanner.drive.DriveClient
 import app.receiptscanner.drive.DriveException
+import app.receiptscanner.drive.stableFileId
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -52,7 +53,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 val root = drive.findOrCreateFolder(folderName)
                 if (tripFolder != null) drive.findOrCreateFolder(tripFolder, parentId = root) else root
             }
-            drive.upload(file, file.name, folderId)
+            // Kept beside the receipt, so retries, restarts and the Retry button all reuse it.
+            val fileId = stableFileId(File(file.parentFile, DRIVE_ID_FILE)) { drive.generateFileId() }
+            drive.upload(file, file.name, folderId, fileId)
             file.parentFile?.deleteRecursively()
             Result.success()
         } catch (e: DriveException) {
@@ -75,6 +78,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val KEY_PATH = "path"
         private const val KEY_FOLDER = "folder"
         private const val KEY_TRIP = "trip"
+        private const val DRIVE_ID_FILE = "drive-file-id"
         const val KEY_ERROR = "error"
         const val WORK_TAG = "receipt-upload"
         const val PATH_TAG_PREFIX = "path:"

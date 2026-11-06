@@ -25,10 +25,28 @@ class DriveClient(private val accessToken: String) {
         findFolder(name, parentId) ?: createFolder(name, parentId)
     }
 
-    /** Uploads [file] as [fileName] into [folderId]; returns the new file id. */
-    suspend fun upload(file: File, fileName: String, folderId: String, mimeType: String = "image/jpeg"): String =
+    /** Asks Drive for a file id to create a file with later; see [upload]. */
+    suspend fun generateFileId(): String = withContext(Dispatchers.IO) {
+        val url = "$FILES_URL/generateIds?count=1&fields=ids"
+        JSONObject(execute(Request.Builder().url(url).get().build())).getJSONArray("ids").getString(0)
+    }
+
+    /**
+     * Uploads [file] as [fileName] into [folderId], creating it with the id [fileId].
+     *
+     * Safe to repeat with the same [fileId]: if an earlier attempt reached Drive even though
+     * we never saw the response, Drive answers 409 instead of creating a second file.
+     */
+    suspend fun upload(
+        file: File,
+        fileName: String,
+        folderId: String,
+        fileId: String,
+        mimeType: String = "image/jpeg",
+    ): Unit =
         withContext(Dispatchers.IO) {
             val metadata = JSONObject()
+                .put("id", fileId)
                 .put("name", fileName)
                 .put("parents", JSONArray().put(folderId))
             val body = MultipartBody.Builder()
@@ -40,7 +58,11 @@ class DriveClient(private val accessToken: String) {
                 .url("$UPLOAD_URL?uploadType=multipart&fields=id")
                 .post(body)
                 .build()
-            JSONObject(execute(request)).getString("id")
+            try {
+                execute(request)
+            } catch (e: DriveException) {
+                if (e.code != HTTP_CONFLICT) throw e
+            }
         }
 
     private fun findFolder(name: String, parentId: String): String? {
@@ -80,6 +102,7 @@ class DriveClient(private val accessToken: String) {
 
     companion object {
         private const val ROOT = "root"
+        private const val HTTP_CONFLICT = 409
         private const val FILES_URL ="https://www.googleapis.com/drive/v3/files"
         private const val UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
         private const val FOLDER_MIME = "application/vnd.google-apps.folder"
