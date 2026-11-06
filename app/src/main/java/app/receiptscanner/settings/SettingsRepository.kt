@@ -15,6 +15,8 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
 data class Settings(
     /** Drive folder (in My Drive root) that receipts are uploaded to. Created by the app if missing. */
     val folderName: String = DEFAULT_FOLDER,
+    /** Subfolder of [folderName] for the active trip, e.g. "Oslo November 2026"; null when not on a trip. */
+    val tripFolder: String? = null,
     /** Skip the review screen and upload immediately with the suggested name. */
     val autoUpload: Boolean = false,
     /** Open the scanner straight away when the app starts. */
@@ -30,6 +32,7 @@ data class Settings(
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val folder = stringPreferencesKey("folder_name")
+        val tripFolder = stringPreferencesKey("trip_folder")
         val autoUpload = booleanPreferencesKey("auto_upload")
         val scanOnLaunch = booleanPreferencesKey("scan_on_launch")
         val driveConnected = booleanPreferencesKey("drive_connected")
@@ -40,6 +43,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun current(): Settings = settings.first()
 
     suspend fun setFolderName(name: String) = update { it[Keys.folder] = name }
+    suspend fun setTripFolder(name: String?) = update {
+        if (name != null) it[Keys.tripFolder] = name else it.remove(Keys.tripFolder)
+    }
     suspend fun setAutoUpload(value: Boolean) = update { it[Keys.autoUpload] = value }
     suspend fun setScanOnLaunch(value: Boolean) = update { it[Keys.scanOnLaunch] = value }
     suspend fun setDriveConnected(value: Boolean) = update { it[Keys.driveConnected] = value }
@@ -50,6 +56,7 @@ class SettingsRepository(private val context: Context) {
 
     private fun Preferences.toSettings() = Settings(
         folderName = this[Keys.folder]?.takeIf { it.isNotBlank() } ?: Settings.DEFAULT_FOLDER,
+        tripFolder = this[Keys.tripFolder],
         autoUpload = this[Keys.autoUpload] ?: false,
         scanOnLaunch = this[Keys.scanOnLaunch] ?: true,
         driveConnected = this[Keys.driveConnected] ?: false,

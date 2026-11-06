@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDate
+import java.util.Locale
 
 class ReceiptNamerTest {
 
@@ -95,5 +96,22 @@ class ReceiptNamerTest {
     @Test
     fun `sanitize removes path characters`() {
         assertEquals("A B C", ReceiptNamer.sanitize("A/B:C"))
+    }
+
+    @Test
+    fun `trip folder is destination, month and year`() {
+        assertEquals("Oslo November 2026", ReceiptNamer.tripFolderName("Oslo", today))
+        assertEquals("New York March 2027", ReceiptNamer.tripFolderName("  New  York ", LocalDate.of(2027, 3, 1)))
+    }
+
+    @Test
+    fun `trip folder ignores the device language`() {
+        val original = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("nb-NO"))
+        try {
+            assertEquals("Oslo November 2026", ReceiptNamer.tripFolderName("Oslo", today))
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 }
